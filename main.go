@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -16,30 +15,13 @@ func main() {
 	hub := newHub()
 	go hub.run() // goroutine unique qui gère inscriptions + broadcast
 
-	http.HandleFunc("/", home)
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	http.Handle("/ws", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveWS(hub, w, r)
-	})
+	}))
+	http.Handle("/", http.FileServer(http.Dir("static")))
 
 	log.Println("Serveur lancé sur http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-
-func home(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, `<!DOCTYPE html>
-<html><body>
-<h1>Chat Go</h1>
-<p>Ouvre la console du navigateur ou utilise un client WebSocket sur <code>ws://localhost:8080/ws</code></p>
-<script>
-const ws = new WebSocket("ws://" + location.host + "/ws");
-ws.onmessage = (e) => {
-  const p = document.createElement("p");
-  p.textContent = e.data;
-  document.body.appendChild(p);
-};
-ws.onopen = () => ws.send("Bonjour depuis le navigateur !");
-</script>
-</body></html>`)
 }
 
 // ---------------------------------------------------------------------------
