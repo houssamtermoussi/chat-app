@@ -1,0 +1,122 @@
+const statusEl = document.getElementById("status");
+    const networkHintEl = document.getElementById("network-hint");
+    const messagesEl = document.getElementById("messages");
+    const pseudoInput = document.getElementById("pseudo");
+    const pseudoBtn = document.getElementById("pseudo-btn");
+    const form = document.getElementById("chat-form");
+    const messageInput = document.getElementById("message-input");
+    const sendBtn = document.getElementById("send-btn");
+
+    let pseudo = localStorage.getItem("chat-pseudo") || "";
+    if (pseudo) pseudoInput.value = pseudo;
+
+    function addMessage(text, className = "") {
+      const li = document.createElement("li");
+      if (className) li.className = className;
+      li.textContent = text;
+      messagesEl.appendChild(li);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function addChatLine(author, text) {
+      const li = document.createElement("li");
+      const span = document.createElement("span");
+      span.className = "author";
+      span.textContent = author + " :";
+      li.appendChild(span);
+      li.appendChild(document.createTextNode(" " + text));
+      messagesEl.appendChild(li);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function setConnected(connected) {
+      statusEl.textContent = connected ? "Connecté" : "Déconnecté";
+      statusEl.className = connected ? "connected" : "disconnected";
+      messageInput.disabled = !connected;
+      sendBtn.disabled = !connected;
+    }
+
+    function formatOutgoing(text) {
+      const name = pseudo.trim() || "Anonyme";
+      return name + ": " + text;
+    }
+
+    function parseIncoming(raw) {
+      const i = raw.indexOf(": ");
+      if (i === -1) return { author: "?", text: raw };
+      return {
+        author: raw.slice(0, i),
+        text: raw.slice(i + 2),
+      };
+    }
+
+    async function loadNetworkHint() {
+      try {
+        const res = await fetch("/api/info");
+        const info = await res.json();
+        const onLocalhost = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+
+        if (!info.on_wifi) {
+          networkHintEl.innerHTML =
+            "<strong>Autre appareil :</strong> connecte ce PC au Wi‑Fi, relance le serveur, puis utilise l’IP affichée dans le terminal.";
+          return;
+        }
+
+        const links = info.urls
+          .map((u) => `<a href="${u}">${u}</a>`)
+          .join("<br>");
+
+        if (onLocalhost) {
+          networkHintEl.innerHTML =
+            "<strong>Sur téléphone / autre PC (même Wi‑Fi) :</strong> ouvre une de ces adresses — pas <code>localhost</code> :<br>" +
+            links;
+        } else {
+          networkHintEl.innerHTML =
+            "<strong>Tu es déjà sur le réseau.</strong> Partage cette adresse avec l’autre appareil :<br>" +
+            `<a href="${location.origin}">${location.origin}</a>`;
+        }
+      } catch {
+        networkHintEl.textContent = "Impossible de charger les adresses réseau.";
+      }
+    }
+
+    loadNetworkHint();
+
+    const ws = new WebSocket(
+      (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws"
+    );
+
+    ws.onopen = () => {
+      setConnected(true);
+      addMessage("Tu es connecté au salon.", "system");
+    };
+
+    ws.onclose = () => {
+      setConnected(false);
+      addMessage("Connexion fermée.", "system");
+    };
+
+    ws.onerror = () => {
+      addMessage("Erreur de connexion.", "system");
+    };
+
+    ws.onmessage = (event) => {
+      const { author, text } = parseIncoming(event.data);
+      addChatLine(author, text);
+    };
+
+    pseudoBtn.addEventListener("click", () => {
+      pseudo = pseudoInput.value.trim();
+      localStorage.setItem("chat-pseudo", pseudo);
+      addMessage("Pseudo enregistré : " + (pseudo || "Anonyme"), "system");
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = messageInput.value.trim();
+      if (!text || ws.readyState !== WebSocket.OPEN) return;
+
+      ws.send(formatOutgoing(text));
+      messageInput.value = "";
+      messageInput.focus();
+    });
