@@ -40,7 +40,7 @@ func (h *Hub) run() {
 		select {
 		case client := <-h.register:
 			h.clients[client] = true
-			log.Printf("Client connecté (%d en ligne)", len(h.clients))
+			log.Printf("Client connecté depuis %s (%d en ligne)", client.conn.RemoteAddr(), len(h.clients))
 
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
